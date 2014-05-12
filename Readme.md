@@ -59,8 +59,21 @@ is called with any error and the compiled result.
 ### obj.computeBatch(prev, next)
 
 Returns a batch operations array (compatible with `leveldb`) that will patch the
-database in the state `prev` to match the state of `next`. Behind the scenes,
-this method just calls `obj.convertPatch(obj.computePatch(prev, next))`.
+database in the state `prev` to match the state of `next`.
+
+Note: you will lose any information about the object's state that stops short of
+that `opts.depth`. The default depth is `0`.
+
+```js
+// in the database used with objectify({depth: 2}), this is one document.
+// {key: 'aÿbÿc', value: {d: 'e'}}
+var prev = { a: { b: { c: {d: 'e'} } } }
+var next = { a: {} }
+
+var batch = objectify({depth: 2}).computeBatch(prev, next)
+// this will simply delete the one document. {a: {}} will be lost.
+// [{type: 'del', key: 'aÿbÿc'}]
+```
 
 ### obj.computePatch(prev, next)
 

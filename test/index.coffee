@@ -35,7 +35,6 @@ test 'compile stream', (t) ->
     t.end()
 
 test 'compute batch', (t) ->
-  #  wraps convertPatch(computePatch(p, n))
   batch = objectify({depth: 1}).computeBatch c1, c2
   t.same batch, [
     { key: 'personÿsix', type: 'del' }
