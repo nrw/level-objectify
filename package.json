@@ -1,7 +1,7 @@
 {
   "name": "level-objectify",
   "description": "compile the contents of a leveldb read stream into an object and create a patch for changes as a batch update",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "repository": {
     "type": "git",
     "url": "git://github.com/nrw/level-objectify.git"
