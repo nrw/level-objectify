@@ -4,17 +4,42 @@ reduce = require 'stream-reduce'
 exports = module.exports = (opts = {}) ->
   opts.separator or= '\xff'
   opts.depth or= 0
+  opts.depth = 0 if opts.depth < 0
 
   computePatch = patcher.computePatch
 
-  convertPatch = (patch) ->
-    batch = []
-    walkDiff batch, patch, [], opts
-    batch
-
   computeBatch = (prev, next) ->
     patch = computePatch prev, next
-    convertPatch patch
+
+    # all docs at opts.depth in the patch need to be changed
+    paths = getPaths patch, opts.depth
+
+    # 'next' is in the state we want
+    # create an operation for each doc in paths
+    batch = []
+
+    add = (type, path, value = null) ->
+      key = path.join(opts.separator)
+      obj = {type, key}
+      obj.value = value if value
+      batch.push obj
+
+    for path in paths
+      if path.length < opts.depth+1
+        state = prev
+        state = state?[key] for key in path
+        keys = getKeys(state, path, opts.depth-path.length)
+
+        add('del', key) for key in keys
+
+      else
+        state = next
+        state = state?[key] for key in path
+        if state
+          add('put', path, state)
+        else
+          add('del', path)
+    batch
 
   compile = (cb = ->) ->
     reducer = (acc, h) ->
@@ -32,36 +57,36 @@ exports = module.exports = (opts = {}) ->
     stream.on 'err', cb
 
   {
-    computeBatch, computePatch, convertPatch, compile
-    writeStream: compile
-    createWriteStream: compile
+    computeBatch, computePatch, compile
+    writeStream: compile, createWriteStream: compile
   }
 
-walkDiff = (batch, obj, path, opts) ->
-  base = path
+getKeys = (state, base, depth, acc = []) ->
+  if depth < 0
+    acc.push base
+    return base
 
-  for key, value of obj
+  for k, v of state
     path = base.slice(0)
-    path.push key
+    path.push k
+    getKeys v, path, depth-1, acc
+  acc
 
-    if path.length - 1 >= opts.depth
-      # bank change
-      finish batch, value, path, opts
+getPaths = (patch, depth, base = [], acc = []) ->
+  if depth < 0
+    acc.push base
+    return base
+
+  for k, v of patch
+    path = base.slice(0)
+    if k is '$r'
+      v = [v] unless Array.isArray(v)
+      for rm in v
+        p = path.slice(0)
+        p.push rm
+        getPaths null, -1, p, acc
     else
-      # recurse
-      walkDiff batch, value, path, opts
-  null
+      path.push k
+      getPaths v, depth-1, path, acc
 
-finish = (batch, value, path, opts) ->
-  if path[path.length-1] is '$r'
-    path.pop()
-    path.push value
-    type = 'del'
-  else
-    type = 'put'
-  batch.push chg type, path.join(opts.separator), value
-
-chg = (type, key, value) ->
-  obj = {type, key}
-  obj.value = value if value
-  obj
+  acc

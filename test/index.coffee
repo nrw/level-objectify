@@ -1,9 +1,10 @@
 test = require 'tape'
-level = require('level-test')()
+level = require('level-test')({mem: yes})
 
 objectify = require('../')
 
 db = level 'level-objectify-test', {valueEncoding: 'json'}
+db2 = level 'level-objectify-test2', {valueEncoding: 'json'}
 
 c1 = person: {gaius: {name: 'Gaius Baltar'}, six: {name: 'Six'}}
 c2 = person: {gaius: {name: 'Gaius Baltar'}, kara: {name: 'Kara Thrace'}}
@@ -20,17 +21,8 @@ test 'identity', (t) ->
   t.same patch, c1
   t.end()
 
-test 'batch', (t) ->
-  batch = objectify({depth: 1}).convertPatch c1
-
-  t.same batch, [
-    { key: 'personÿgaius', type: 'put', value: { name: 'Gaius Baltar' } }
-    { key: 'personÿsix', type: 'put', value: { name: 'Six' } }
-  ]
-  t.end()
-
 test 'fill', (t) ->
-  batch = objectify({depth: 1}).convertPatch c1
+  batch = objectify({depth: 1}).computeBatch {}, c1
   db.batch batch, (err) ->
     t.notOk err
     t.end()
@@ -46,7 +38,7 @@ test 'compute batch', (t) ->
   #  wraps convertPatch(computePatch(p, n))
   batch = objectify({depth: 1}).computeBatch c1, c2
   t.same batch, [
-    { key: 'personÿsix', type: 'del', value: 'six' }
+    { key: 'personÿsix', type: 'del' }
     { key: 'personÿkara', type: 'put', value: { name: 'Kara Thrace' } }
   ]
   t.end()
@@ -65,19 +57,18 @@ test 'deeper key mod', (t) ->
   batch = objectify({depth: 2}).computeBatch c3, c4
 
   t.same batch, [
-    { key: 'bipedÿhumanÿkara', type: 'del', value: 'kara' }
+    { key: 'bipedÿhumanÿkara', type: 'del' }
     { key: 'bipedÿcylonÿboomer', type: 'put', value: { name: 'Boomer' } }
   ]
   t.end()
 
 test 'save deeper key', (t) ->
-  db = level 'level-objectify-test2', {valueEncoding: 'json'}
-  db.batch objectify({depth: 2}).computeBatch({}, c3), (err) ->
+  db2.batch objectify({depth: 2}).computeBatch({}, c3), (err) ->
     t.notOk err
     t.end()
 
 test 'deeper key compile', (t) ->
-  db.readStream().pipe objectify({depth: 2}).compile (err, data) ->
+  db2.readStream().pipe objectify({depth: 2}).compile (err, data) ->
     t.notOk err
     t.same data, c3
     t.end()
@@ -93,4 +84,69 @@ test 'zero depth', (t) ->
       kara: { name: 'Kara Thrace' } }
     }
   }]
+  t.end()
+
+test 'multiple deletes', (t) ->
+  c5 = {a: 'a', b: 'b', c: 'c', d: {e: 'e', f: 'f'}}
+  c6 = {a: 'a', d: {e: 'e'}}
+
+  batch = objectify({depth: 0}).computeBatch c5, c6
+
+  t.same batch, [
+    { key: 'b', type: 'del' },
+    { key: 'c', type: 'del' },
+    { key: 'd', type: 'put', value: { e: 'e' } } ]
+  t.end()
+
+test 'deep nesting', (t) ->
+  c7 =
+    a:
+      a:
+        b: 'b'
+        c: 'b'
+        d: 'e'
+        f:
+          g: [1,2,3]
+    b: b: {b: 'b'}
+    c: c: {c: 'c'}
+    d: d: {e: 'e', f: 'f'}
+    e:
+      a:
+        b: 'b'
+        c: 'b'
+        d: 'e'
+        f:
+          g: [1,2,3]
+          h: ['x','y','z']
+
+  c8 =
+    a:
+      a:
+        b: 'b'
+        c: 'b'
+        d: 'e'
+        f:
+          g: [1,3] # dropped 2
+    b: b: {b: 'b'}
+    # dropped c: c: c
+    d: {} # dropped d: d: {e: 'e', f: 'f'}
+    e:
+      a:
+        b: 'b'
+        c: 'b'
+        d: 'e'
+        f:
+          g: [1,2,3]
+          h:
+            a: ['x','y','z'] # moved array to 'a'
+
+  batch = objectify({depth: 2}).computeBatch c7, c8
+
+  t.same batch, [
+    {type: "del", key: "cÿcÿc"},
+    {type: "put", key: "aÿaÿf", value: { g: [1, 3] }},
+    {type: "del", key: "dÿdÿe"},
+    {type: "del", key: "dÿdÿf"},
+    {type: "put", key: "eÿaÿf", value: { g: [1, 2, 3], h: {a: ["x", "y", "z"]}} }
+  ]
   t.end()
