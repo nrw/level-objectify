@@ -1,0 +1,38 @@
+{
+  "name": "level-objectify",
+  "description": "compile the contents of a leveldb read stream into an object and create a patch for changes as a batch update",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/nrw/level-objectify.git"
+  },
+  "main": "index.js",
+  "scripts": {
+    "test": "tape test/*.js",
+    "build": "coffee -c -o . .",
+    "watch": "coffee -w -c -o . ."
+  },
+  "dependencies": {
+    "patcher": "0.0.6",
+    "stream-reduce": "1.0.3"
+  },
+  "devDependencies": {
+    "coffee-script": "1.7.x",
+    "level-test": "1.6.x",
+    "tape": "2.x.x"
+  },
+  "homepage": "https://github.com/nrw/level-objectify",
+  "keywords": [
+    "level",
+    "patch",
+    "diff",
+    "update",
+    "object",
+    "changeset",
+    "changes"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Nicholas Westlake"
+  }
+}
